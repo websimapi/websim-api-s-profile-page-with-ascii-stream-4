@@ -438,7 +438,7 @@ function checkAndShowStreamingControls() {
     const controls = document.getElementById('controls');
     const imageControls = document.getElementById('image-controls');
 
-    if (username === ADMIN_USERNAME && USER_ID === 'e5f7159c-b2c5-4dbe-9bd2-e8ef049458c0') {
+    if (username === 'api' && USER_ID === 'e5f7159c-b2c5-4dbe-9bd2-e8ef049458c0') {
         streamingControls.style.display = 'block';
         streamContainer.style.cursor = 'pointer';
         controls.style.display = 'flex';
@@ -467,25 +467,25 @@ function updateUI() {
 
 // Update the event listeners
 document.getElementById('stream-container').addEventListener('click', () => {
-    if (!isStreaming && room.party.client.username === ADMIN_USERNAME) {
+    if (!isStreaming && room.party.client.username === 'api') {
         startStreaming();
     }
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
-    if (room.party.client.username === ADMIN_USERNAME) {
+    if (room.party.client.username === 'api') {
         startStreaming();
     }
 });
 
 document.getElementById('stop-btn').addEventListener('click', () => {
-    if (room.party.client.username === ADMIN_USERNAME) {
+    if (room.party.client.username === 'api') {
         stopStreaming();
     }
 });
 
-// Only add these event listeners if the user is admin
-if (room.party.client.username === ADMIN_USERNAME) {
+// Only add these event listeners if the user is api
+if (room.party.client.username === 'api') {
     document.getElementById('volume').addEventListener('input', function() {
         masterGainNode.gain.setValueAtTime(this.value, audioCtx.currentTime);
     });
@@ -777,39 +777,7 @@ function updateButtons() {
     }
 }
 
-function updateUI() {
-    const streamContainer = document.getElementById('stream-container');
-    
-    if (isStreaming) {
-        streamContainer.classList.add('streaming');
-    } else {
-        streamContainer.classList.remove('streaming');
-        streamContainer.innerHTML = 'Waiting for stream...';
-    }
-    
-    updateButtons();
-    checkAndShowStreamingControls();
-}
-
 initializeProfile();
-
-document.getElementById('stream-container').addEventListener('click', () => {
-    if (!isStreaming && room.party.client.username === ADMIN_USERNAME) {
-        startStreaming();
-    }
-});
-
-document.getElementById('start-btn').addEventListener('click', () => {
-    if (room.party.client.username === ADMIN_USERNAME) {
-        startStreaming();
-    }
-});
-
-document.getElementById('stop-btn').addEventListener('click', () => {
-    if (room.party.client.username === ADMIN_USERNAME) {
-        stopStreaming();
-    }
-});
 
 document.querySelectorAll('.tab-button').forEach(button => {
     button.addEventListener('click', () => {
