@@ -268,4 +268,379 @@ h2 {
             <h1 id="username">API</h1>
         </div>
         <div class="stats">
-            <div class="<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+            <div class="stat">
+                <div class="stat-value" id="followers">0</div>
+                <div class="stat-label">Followers</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="following">0</div>
+                <div class="stat-label">Following</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="projects">0</div>
+                <div class="stat-label">Projects</div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div id="streaming-content">
+            <div id="stream-container" class="stream-container">
+                Click to start streaming
+            </div>
+            <div id="viewers-count">Viewers: 0</div>
+            <div id="controls">
+                <button id="start-stream">Start Stream</button>
+                <button id="stop-stream" disabled>Stop Stream</button>
+            </div>
+            <div id="image-controls" style="display: none;">
+                <label>
+                    Master Volume:
+                    <input type="range" id="master-volume" min="0" max="100" value="100">
+                </label>
+                <label>
+                    Brightness:
+                    <input type="range" id="brightness" min="0" max="200" value="100">
+                </label>
+                <label>
+                    Contrast:
+                    <input type="range" id="contrast" min="0" max="200" value="100">
+                </label>
+                <label>
+                    Blur:
+                    <input type="range" id="blur" min="0" max="20" value="0" step="0.1">
+                </label>
+            </div>
+            <div id="chat-container">
+                <div id="chat-messages"></div>
+                <div>
+                    <input type="text" id="chat-input" placeholder="Type your message...">
+                    <button id="chat-send">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button active" data-tab="projects">Projects</button>
+                <button class="tab-button" data-tab="followers">Followers</button>
+                <button class="tab-button" data-tab="following">Following</button>
+            </div>
+            <div id="projects-tab" class="tab-content active">
+                <h2>Projects</h2>
+                <ul id="project-list" class="project-grid"></ul>
+                <button id="load-more-projects" class="load-more">Load More</button>
+            </div>
+            <div id="followers-tab" class="tab-content">
+                <h2>Followers</h2>
+                <ul id="followers-list" class="follow-list"></ul>
+                <button id="load-more-followers" class="load-more">Load More</button>
+            </div>
+            <div id="following-tab" class="tab-content">
+                <h2>Following</h2>
+                <ul id="following-list" class="follow-list"></ul>
+                <button id="load-more-following" class="load-more">Load More</button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+const apiURL = 'https://api.websim.ai';
+const username = 'api';
+let mediaRecorder;
+let audioContext;
+let audioSource;
+let isStreaming = false;
+let socket;
+let viewers = 0;
+
+document.addEventListener('DOMContentLoaded', () => {
+    fetchUserData();
+    setupEventListeners();
+    setupWebSocket();
+});
+
+function fetchUserData() {
+    fetch(`${apiURL}/users/${username}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('username').textContent = data.username;
+            document.getElementById('avatar').style.backgroundImage = `url(${data.avatar})`;
+            document.getElementById('followers').textContent = data.followers;
+            document.getElementById('following').textContent = data.following;
+            document.getElementById('projects').textContent = data.projects;
+        })
+        .catch(error => console.error('Error fetching user data:', error));
+}
+
+function setupEventListeners() {
+    document.getElementById('start-stream').addEventListener('click', startStreaming);
+    document.getElementById('stop-stream').addEventListener('click', stopStreaming);
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => switchTab(button.dataset.tab));
+    });
+    document.getElementById('load-more-projects').addEventListener('click', () => loadMore('projects'));
+    document.getElementById('load-more-followers').addEventListener('click', () => loadMore('followers'));
+    document.getElementById('load-more-following').addEventListener('click', () => loadMore('following'));
+    document.getElementById('chat-send').addEventListener('click', sendChatMessage);
+    document.getElementById('chat-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendChatMessage();
+    });
+
+    const imageControls = ['brightness', 'contrast', 'blur', 'master-volume'];
+    imageControls.forEach(control => {
+        document.getElementById(control).addEventListener('input', updateImageSettings);
+    });
+}
+
+function setupWebSocket() {
+    socket = new WebSocket('wss://websim.ai/ws');
+    
+    socket.onopen = () => {
+        console.log('WebSocket connection established');
+    };
+
+    socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'viewerCount') {
+            viewers = data.count;
+            updateViewerCount();
+        } else if (data.type === 'chat') {
+            addChatMessage(data.username, data.message);
+        }
+    };
+
+    socket.onclose = () => {
+        console.log('WebSocket connection closed');
+    };
+}
+
+function startStreaming() {
+    if (isStreaming) return;
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+            audioContext = new AudioContext();
+            audioSource = audioContext.createMediaStreamSource(stream);
+
+            const canvasEl = document.createElement('canvas');
+            canvasEl.width = 640;
+            canvasEl.height = 480;
+            const ctx = canvasEl.getContext('2d');
+
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.play();
+
+            mediaRecorder.ondataavailable = (event) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64data = reader.result;
+                    socket.send(JSON.stringify({ type: 'stream', data: base64data }));
+                };
+                reader.readAsDataURL(event.data);
+            };
+
+            mediaRecorder.start(1000);
+
+            function drawVideo() {
+                if (isStreaming) {
+                    ctx.drawImage(video, 0, 0, canvasEl.width, canvasEl.height);
+                    const imageData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+                    const asciiFrame = convertToASCII(imageData);
+                    document.getElementById('stream-container').innerHTML = asciiFrame;
+                    requestAnimationFrame(drawVideo);
+                }
+            }
+
+            drawVideo();
+
+            isStreaming = true;
+            document.getElementById('start-stream').disabled = true;
+            document.getElementById('stop-stream').disabled = false;
+            document.getElementById('image-controls').style.display = 'block';
+            updateButtons();
+        })
+        .catch(error => console.error('Error accessing media devices:', error));
+}
+
+function stopStreaming() {
+    if (!isStreaming) return;
+
+    if (mediaRecorder) {
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    }
+
+    if (audioContext) {
+        audioContext.close();
+    }
+
+    isStreaming = false;
+    document.getElementById('start-stream').disabled = false;
+    document.getElementById('stop-stream').disabled = true;
+    document.getElementById('image-controls').style.display = 'none';
+    document.getElementById('stream-container').innerHTML = 'Click to start streaming';
+    updateButtons();
+}
+
+function convertToASCII(imageData) {
+    const asciiChars = ['@', '#', 'S', '%', '?', '*', '+', ';', ':', ',', '.'];
+    let ascii = '';
+    for (let i = 0; i < imageData.height; i += 8) {
+        for (let j = 0; j < imageData.width; j += 4) {
+            const offset = (i * imageData.width + j) * 4;
+            const brightness = (imageData.data[offset] + imageData.data[offset + 1] + imageData.data[offset + 2]) / 3;
+            const character = asciiChars[Math.floor(brightness / 25)];
+            ascii += character;
+        }
+        ascii += '\n';
+    }
+    return ascii;
+}
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+
+    document.getElementById(`${tabName}-tab`).classList.add('active');
+    document.querySelector(`.tab-button[data-tab="${tabName}"]`).classList.add('active');
+
+    if (tabName === 'projects') {
+        loadProjects();
+    } else if (tabName === 'followers') {
+        loadFollowers();
+    } else if (tabName === 'following') {
+        loadFollowing();
+    }
+}
+
+function loadProjects() {
+    fetch(`${apiURL}/users/${username}/projects`)
+        .then(response => response.json())
+        .then(projects => {
+            const projectList = document.getElementById('project-list');
+            projectList.innerHTML = '';
+            projects.forEach(project => {
+                const projectElement = createProjectElement(project);
+                projectList.appendChild(projectElement);
+            });
+        })
+        .catch(error => console.error('Error loading projects:', error));
+}
+
+function loadFollowers() {
+    fetch(`${apiURL}/users/${username}/followers`)
+        .then(response => response.json())
+        .then(followers => {
+            const followersList = document.getElementById('followers-list');
+            followersList.innerHTML = '';
+            followers.forEach(follower => {
+                const followerElement = createFollowElement(follower);
+                followersList.appendChild(followerElement);
+            });
+        })
+        .catch(error => console.error('Error loading followers:', error));
+}
+
+function loadFollowing() {
+    fetch(`${apiURL}/users/${username}/following`)
+        .then(response => response.json())
+        .then(following => {
+            const followingList = document.getElementById('following-list');
+            followingList.innerHTML = '';
+            following.forEach(follow => {
+                const followElement = createFollowElement(follow);
+                followingList.appendChild(followElement);
+            });
+        })
+        .catch(error => console.error('Error loading following:', error));
+}
+
+function createProjectElement(project) {
+    const li = document.createElement('li');
+    li.className = 'project-item';
+    li.innerHTML = `
+        <div class="project-image" style="background-image: url(${project.image})"></div>
+        <div class="project-details">
+            <h3 class="project-title">${project.title}</h3>
+            <p class="project-description">${project.description}</p>
+            <div class="project-stats">
+                <span>${project.likes} likes</span>
+                <span>${project.comments} comments</span>
+            </div>
+        </div>
+    `;
+    return li;
+}
+
+function createFollowElement(user) {
+    const li = document.createElement('li');
+    li.className = 'follow-item';
+    li.innerHTML = `
+        <h3 class="follow-username">${user.username}</h3>
+        <p class="follow-bio">${user.bio}</p>
+    `;
+    return li;
+}
+
+function loadMore(type) {
+    console.log(`Loading more ${type}...`);
+    // Implement pagination logic here
+}
+
+function updateImageSettings() {
+    const brightness = document.getElementById('brightness').value;
+    const contrast = document.getElementById('contrast').value;
+    const blur = document.getElementById('blur').value;
+    const volume = document.getElementById('master-volume').value;
+
+    document.getElementById('stream-container').style.filter = `
+        brightness(${brightness}%)
+        contrast(${contrast}%)
+        blur(${blur}px)
+    `;
+
+    if (audioSource) {
+        const gainNode = audioContext.createGain();
+        gainNode.gain.setValueAtTime(volume / 100, audioContext.currentTime);
+        audioSource.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+    }
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (message) {
+        socket.send(JSON.stringify({ type: 'chat', username, message }));
+        input.value = '';
+    }
+}
+
+function addChatMessage(username, message) {
+    const chatMessages = document.getElementById('chat-messages');
+    const messageElement = document.createElement('div');
+    messageElement.textContent = `${username}: ${message}`;
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function updateViewerCount() {
+    document.getElementById('viewers-count').textContent = `Viewers: ${viewers}`;
+}
+
+function updateButtons() {
+    const startButton = document.getElementById('start-stream');
+    const stopButton = document.getElementById('stop-stream');
+    startButton.disabled = isStreaming;
+    stopButton.disabled = !isStreaming;
+}
+
+// Initial load
+switchTab('projects');
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body></html>
