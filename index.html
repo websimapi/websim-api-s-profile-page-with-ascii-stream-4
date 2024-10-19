@@ -438,13 +438,14 @@ function checkAndShowStreamingControls() {
     const controls = document.getElementById('controls');
     const imageControls = document.getElementById('image-controls');
 
+    streamingControls.style.display = 'block';
+    streamContainer.style.display = 'block';
+
     if (username === 'api' && USER_ID === 'e5f7159c-b2c5-4dbe-9bd2-e8ef049458c0') {
-        streamingControls.style.display = 'block';
         streamContainer.style.cursor = 'pointer';
         controls.style.display = 'flex';
         imageControls.style.display = 'block';
     } else {
-        streamingControls.style.display = 'none';
         streamContainer.style.cursor = 'default';
         controls.style.display = 'none';
         imageControls.style.display = 'none';
