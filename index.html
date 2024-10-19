@@ -432,7 +432,7 @@ async function initializeProfile() {
 }
 
 function checkAndShowStreamingControls() {
-    const username = document.getElementById('username').textContent;
+    const username = room.party.client.username;
     const streamingControls = document.getElementById('streaming-controls');
     const streamContainer = document.getElementById('stream-container');
     const controls = document.getElementById('controls');
